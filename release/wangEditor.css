@@ -17,6 +17,12 @@
   display: table;
   clear: both;
 }
+.w-e-menu svg {
+  color: #999;
+}
+.w-e-menu:hover svg {
+  color: #333;
+}
 
 .w-e-toolbar .w-e-droplist {
   position: absolute;
