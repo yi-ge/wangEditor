@@ -2612,7 +2612,7 @@ Field.prototype = {
 
     onClick: function onClick() {
         var editor = this.editor;
-        editor.cmd.do('insertHTML', '<span data-contract-field="index" data-field-category="index" contenteditable="false" class="popover-tip">插入合同字段</span>');
+        editor.cmd.do('insertHTML', '<span data-contract-field="index" data-field-category="index" contenteditable="false" class="popover-tip">插入合同字段</span> ');
     }
 };
 
