@@ -548,7 +548,7 @@ var config = {
 
     // 上传图片的自定义参数
     uploadImgParams: {
-        token: 'abcdef12345'
+        // token: 'abcdef12345'
     },
 
     // 上传图片的自定义header
@@ -560,7 +560,7 @@ var config = {
     withCredentials: false,
 
     // 自定义上传图片超时时间 ms
-    uploadImgTimeout: 5000,
+    uploadImgTimeout: 10000,
 
     // 上传图片 hook 
     uploadImgHooks: {
@@ -593,7 +593,10 @@ var config = {
         timeout: function timeout(xhr, editor) {
             // 图片上传超时时触发
         }
-    }
+    },
+
+    // 是否上传七牛云，默认为 false
+    qiniu: false
 
     // 上传图片自定义提示方法
     // customAlert: function (info) {
@@ -2395,7 +2398,9 @@ Video.prototype = {
 // 构造函数
 function Image(editor) {
     this.editor = editor;
-    this.$elem = $('<div class="w-e-menu"><i class="w-e-icon-image"><i/></div>');
+    var imgMenuId = getRandom('w-e-img');
+    this.$elem = $('<div class="w-e-menu" id="' + imgMenuId + '"><i class="w-e-icon-image"><i/></div>');
+    editor.imgMenuId = imgMenuId;
     this.type = 'panel';
 
     // 当前是否 active 状态
@@ -2407,6 +2412,11 @@ Image.prototype = {
     constructor: Image,
 
     onClick: function onClick() {
+        var editor = this.editor;
+        var config = editor.config;
+        if (config.qiniu) {
+            return;
+        }
         if (this._active) {
             this._createEditPanel();
         } else {
@@ -2827,6 +2837,8 @@ function getPasteHtml(e, filterStyle) {
 
     // 过滤无用标签
     pasteHtml = pasteHtml.replace(/<(meta|script|link).+?>/igm, '');
+    // 去掉注释
+    pasteHtml = pasteHtml.replace(/<!--.*?-->/mg, '');
 
     if (filterStyle) {
         // 过滤样式
@@ -3144,8 +3156,9 @@ Text.prototype = {
             }
             var nodeName = $selectionElem.getNodeName();
 
-            // code 中粘贴忽略
+            // code 中只能粘贴纯文本
             if (nodeName === 'CODE' || nodeName === 'PRE') {
+                editor.cmd.do('insertHTML', '<p>' + pasteText + '</p>');
                 return;
             }
 
@@ -3155,24 +3168,15 @@ Text.prototype = {
             //     return
             // }
 
-            if (nodeName === 'DIV' || $textElem.html() === '<p><br></p>' || !pasteFilterStyle) {
-                // 是 div，可粘贴过滤样式的文字和链接。另外，不过滤粘贴的样式，也可直接插入 HTML
-                if (!pasteHtml) {
-                    return;
-                }
-                try {
-                    // firefox 中，获取的 pasteHtml 可能是没有 <ul> 包裹的 <li>
-                    // 因此执行 insertHTML 会报错
-                    editor.cmd.do('insertHTML', pasteHtml);
-                } catch (ex) {
-                    // 此时使用 pasteText 来兼容一下
-                    editor.cmd.do('insertHTML', '<p>' + pasteText + '</p>');
-                }
-            } else {
-                // 不是 div，证明在已有内容的元素中粘贴，只粘贴纯文本
-                if (!pasteText) {
-                    return;
-                }
+            if (!pasteHtml) {
+                return;
+            }
+            try {
+                // firefox 中，获取的 pasteHtml 可能是没有 <ul> 包裹的 <li>
+                // 因此执行 insertHTML 会报错
+                editor.cmd.do('insertHTML', pasteHtml);
+            } catch (ex) {
+                // 此时使用 pasteText 来兼容一下
                 editor.cmd.do('insertHTML', '<p>' + pasteText + '</p>');
             }
         });
@@ -3327,13 +3331,6 @@ Command.prototype = {
     _insertHTML: function _insertHTML(html) {
         var editor = this.editor;
         var range = editor.selection.getRange();
-
-        // 保证传入的参数是 html 代码
-        var test = /^<.+>$/.test(html);
-        if (!test && !UA.isWebkit()) {
-            // webkit 可以插入非 html 格式的文字
-            throw new Error('执行 insertHTML 命令时传入的参数必须是 html 格式');
-        }
 
         if (this.queryCommandSupported('insertHTML')) {
             // W3C
@@ -4018,10 +4015,18 @@ Editor.prototype = {
         $textContainerElem.css('z-index', zIndex);
         $textElem.addClass('w-e-text');
 
+        // 添加 ID
+        var toolbarElemId = getRandom('toolbar-elem');
+        $toolbarElem.attr('id', toolbarElemId);
+        var textElemId = getRandom('text-elem');
+        $textElem.attr('id', textElemId);
+
         // 记录属性
         this.$toolbarElem = $toolbarElem;
         this.$textContainerElem = $textContainerElem;
         this.$textElem = $textElem;
+        this.toolbarElemId = toolbarElemId;
+        this.textElemId = textElemId;
 
         // 绑定 onchange
         $textContainerElem.on('click keyup', function () {
