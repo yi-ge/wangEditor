@@ -94,10 +94,14 @@ function DomElement(selector) {
     }
 
     this.selector = selector;
+    var nodeType = selector.nodeType;
 
     // 根据 selector 得出的结果（如 DOM，DOM List）
     var selectorResult = [];
-    if (selector.nodeType === 1) {
+    if (nodeType === 9) {
+        // document 节点
+        selectorResult = [selector];
+    } else if (nodeType === 1) {
         // 单个 DOM 节点
         selectorResult = [selector];
     } else if (isDOMList(selector)) {
@@ -519,6 +523,14 @@ var config = {
     // 是否开启 debug 模式（debug 模式下错误会 throw error 形式抛出）
     debug: false,
 
+    // 插入链接时候的格式校验
+    linkCheck: function linkCheck(text, link) {
+        // text 是插入的文字
+        // link 是插入的链接
+        return true; // 返回 true 即表示成功
+        // return '校验失败' // 返回字符串即表示失败的提示信息
+    },
+
     // 粘贴过滤样式，默认开启
     pasteFilterStyle: true,
 
@@ -530,6 +542,11 @@ var config = {
 
     // 是否显示添加网络图片的 tab
     showLinkImg: true,
+
+    // 插入网络图片的回调
+    linkImgCallback: function linkImgCallback(url) {
+        // console.log(url)  // url 即插入图片的地址
+    },
 
     // 默认上传图片 max size: 5M
     uploadImgMaxSize: 5 * 1024 * 1024,
@@ -1257,7 +1274,17 @@ Link.prototype = {
             return;
         }
         var editor = this.editor;
-        editor.cmd.do('insertHTML', '<a href="' + link + '" target="_blank">' + text + '</a>');
+        var config = editor.config;
+        var linkCheck = config.linkCheck;
+        var checkResult = true; // 默认为 true
+        if (linkCheck && typeof linkCheck === 'function') {
+            checkResult = linkCheck(text, link);
+        }
+        if (checkResult === true) {
+            editor.cmd.do('insertHTML', '<a href="' + link + '" target="_blank">' + text + '</a>');
+        } else {
+            alert(checkResult);
+        }
     },
 
     // 试图改变 active 状态
@@ -2957,6 +2984,9 @@ Text.prototype = {
 
         // img 点击
         this._imgHandle();
+
+        // 拖拽事件
+        this._dragHandle();
     },
 
     // 实时保存选取
@@ -3277,6 +3307,31 @@ Text.prototype = {
             // 取消掉 selected 样式，并删除记录
             $textElem.find('img').removeClass(selectedClass);
             editor._selectedImg = null;
+        });
+    },
+
+    // 拖拽事件
+    _dragHandle: function _dragHandle() {
+        var editor = this.editor;
+
+        // 禁用 document 拖拽事件
+        var $document = $(document);
+        $document.on('dragleave drop dragenter dragover', function (e) {
+            e.preventDefault();
+        });
+
+        // 添加编辑区域拖拽事件
+        var $textElem = editor.$textElem;
+        $textElem.on('drop', function (e) {
+            e.preventDefault();
+            var files = e.dataTransfer && e.dataTransfer.files;
+            if (!files || !files.length) {
+                return;
+            }
+
+            // 上传图片
+            var uploadImg = editor.uploadImg;
+            uploadImg.uploadImg(files);
         });
     }
 };
@@ -3661,11 +3716,17 @@ UploadImg.prototype = {
             return;
         }
         var editor = this.editor;
+        var config = editor.config;
         editor.cmd.do('insertHTML', '<img src="' + link + '" style="max-width:100%;"/>');
 
         // 验证图片 url 是否有效，无效的话给出提示
         var img = document.createElement('img');
         img.onload = function () {
+            var callback = config.linkImgCallback;
+            if (callback && typeof callback === 'function') {
+                callback(link);
+            }
+
             img = null;
         };
         img.onerror = function () {
@@ -3691,11 +3752,15 @@ UploadImg.prototype = {
         // ------------------------------ 获取配置信息 ------------------------------
         var editor = this.editor;
         var config = editor.config;
+        var uploadImgServer = config.uploadImgServer;
+        var uploadImgShowBase64 = config.uploadImgShowBase64;
+        if (!uploadImgServer && !uploadImgShowBase64) {
+            return;
+        }
+
         var maxSize = config.uploadImgMaxSize;
         var maxSizeM = maxSize / 1000 / 1000;
         var maxLength = config.uploadImgMaxLength || 10000;
-        var uploadImgServer = config.uploadImgServer;
-        var uploadImgShowBase64 = config.uploadImgShowBase64;
         var uploadFileName = config.uploadFileName || '';
         var uploadImgParams = config.uploadImgParams || {};
         var uploadImgHeaders = config.uploadImgHeaders || {};
